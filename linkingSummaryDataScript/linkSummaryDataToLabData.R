@@ -27,46 +27,26 @@
 # changelog and author contributions / copyrights
 #   Kaelin M. Cawley (2022-01-27)
 #     original creation
+#   Kaelin M. Cawley (2022-10-25)
+#     update for LAGOS
 ##############################################################################################
-
-#This just downloads the files for summary so we can download the basic package for the data
-# dpID = "DP1.20093.001"
-# site_code = "CUPE"
-# year_month = "2020-12"
-# package = "expanded"
-# savepath = "~/GitHub/NEON-water-chemistry-grab-samples/dataFolder"
-# 
-# uri <- paste0("http://data.neonscience.org/api/v0/data/", dpID, "/", site_code, "/",
-#               year_month, "?package=", package)
-# data_info <- jsonlite::fromJSON(txt = uri)
-# data_info <- data_info[["data"]]
-# data_url <- data_info$files$url[grep(pattern = ".csv", data_info$files$name)]
-# data_name <- data_info$files$name[grep(pattern = ".csv", data_info$files$name)]
-# for(i in 1:length(data_name)){
-#   downloader::download(data_url[i], paste0(savepath, "/", data_name[i]), mode="wb")
-# }
 
 waterChemList <-
   neonUtilities::loadByProduct(
     dpID = "DP1.20093.001",
-    site = "GUIL",
-    package = 'basic',
+    site = c("LIRO", "CRAM","PRPO","PRLA","SUGG","BARC"),
+    package = 'expanded',
     check.size = FALSE
   )
 
 externalLabData <- waterChemList$swc_externalLabDataByAnalyte
+externalSummaryData <- waterChemList$swc_externalLabSummaryData
+# Add in now as the labSpecificEndDate for current records in the summary data
+externalSummaryData$labSpecificEndDate[is.na(externalSummaryData$labSpecificEndDate)] <- Sys.Date()
 
-#Read in the summary data
-ecoCoreSummary <- read.csv("~/GitHub/NEON-water-chemistry-grab-samples/dataFolder/NEON.EcoCore_CSU.swc_externalLabSummaryData.20220131T152422Z.csv")
-fiuSummary <- read.csv("~/GitHub/NEON-water-chemistry-grab-samples/dataFolder/NEON.Florida_International_University.swc_externalLabSummaryData.20220131T152422Z.csv")
-#Add in an earlier labSpecificStartDate for FIU since they just started returning data
-fiuSummary$labSpecificStartDate <- "2019-01-01"
-
-allSummary <- rbind(ecoCoreSummary,fiuSummary)
-allSummary$labSpecificEndDate[is.na(allSummary$labSpecificEndDate)|allSummary$labSpecificEndDate == ""] <- format(Sys.Date(), format = "%Y-%m-%d")
-allSummary$labSpecificEndDate <- as.POSIXct(allSummary$labSpecificEndDate, tz = "GMT")
-allSummary$labSpecificStartDate <- as.POSIXct(allSummary$labSpecificStartDate, tz = "GMT")
-externalSummaryData <- allSummary
+# This data should be linked by analysisData in swc_externalLabDataByAnalyte and labSpecificStartDate and labSpecificEndDate in swc_externalLabSummaryData
+# For older data the analysisDate wasn't populated, but we can assume it's about collectDate + 7 days
+externalLabData$analysisDate[is.na(externalLabData$analysisDate)] <- externalLabData$collectDate[is.na(externalLabData$analysisDate)] + 7*24*60*60
 
 #Check that the analytes match
 externalLabData$analyte[!externalLabData$analyte %in% externalSummaryData$analyte]
@@ -82,8 +62,8 @@ for (i in 1:nrow(externalSummaryData)) {
   currAnalyte <- externalSummaryData$analyte[i]
   currLab <- externalSummaryData$laboratoryName[i]
   externalLabData[(
-    externalLabData$startDate >= currStartDate &
-      externalLabData$startDate < currEndDate &
+    externalLabData$analysisDate >= currStartDate &
+      externalLabData$analysisDate < currEndDate &
       externalLabData$analyte == currAnalyte &
       externalLabData$laboratoryName == currLab
   ), namesToAdd] <- externalSummaryData[i, namesToAdd]
